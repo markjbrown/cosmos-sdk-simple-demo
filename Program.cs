@@ -1,49 +1,42 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using Microsoft.Azure.Cosmos;
+using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 
 namespace sample
 {
     class Program
     {
-        private static readonly string uri = "";
-        private static readonly string key = "";
-        private static readonly string databaseId = "database1";
-        private static readonly string containerId = "families";
+        static string uri = "";
+        static string key = "";
+        static string databaseId = "database1";
+        static string containerId = "families";
 
-        private static Container container;
-        private static CosmosClient client;
+        static Container container;
+        static CosmosClient client;
 
 
-        static async Task Main(string[] args)
+        static async Task Main()
         {
             client = new CosmosClient(uri, key);
             Database db = await client.CreateDatabaseIfNotExistsAsync(databaseId);
             container = await db.CreateContainerIfNotExistsAsync(containerId, "/lastName", 400);
 
-            Family family;
-
-            family = await Create();
-
-            await Query(family.LastName, family.Id);
-
-            await Get(family.LastName, family.Id);
-
+            Family family = await Create();
+            List<Family> familyList = await Query(family.LastName, family.Id);
+            family = await Get(family.LastName, family.Id);
             family.Age = 40;
-
             await Update(family);
-
-            await Transaction();
-
+            await FamilyTransaction();
             await Delete(family.LastName, family.Id);
-            
+
         }
 
         public static async Task<Family> Create()
         {
-            Family family = new Family
+            Family family = new()
             {
                 Id = Guid.NewGuid().ToString(),
                 FirstName = "Mark",
@@ -64,7 +57,7 @@ namespace sample
 
         public static async Task<List<Family>> Query(string lastName, string id)
         {
-            List<Family> families = new List<Family>();
+            List<Family> families = new();
 
             string sql = "select * from c where c.id = @id";
 
@@ -90,13 +83,15 @@ namespace sample
             return families;
         }
 
-        public static async Task Get(string lastName, string id)
+        public static async Task<Family> Get(string lastName, string id)
         {
             Response<Family> response = await container.ReadItemAsync<Family>(
                 id: id,
                 partitionKey: new PartitionKey(lastName));
 
             Console.WriteLine(response.RequestCharge);
+
+            return response.Resource;
 
         }
 
@@ -118,9 +113,9 @@ namespace sample
             await container.DeleteItemAsync<Family>(id, new PartitionKey(lastName));
         }
 
-        public static async Task Transaction()
+        public static async Task FamilyTransaction()
         {
-            Family family1 = new Family
+            Family family1 = new()
             {
                 Id = Guid.NewGuid().ToString(),
                 FirstName = "David",
@@ -128,7 +123,7 @@ namespace sample
                 Age = 25
             };
 
-            Family family2 = new Family
+            Family family2 = new()
             {
                 Id = Guid.NewGuid().ToString(),
                 FirstName = "Mary",
@@ -148,7 +143,22 @@ namespace sample
 
         public static void Print(object obj)
         {
-            Console.WriteLine($"{JObject.FromObject(obj).ToString()}\n");
+            Console.WriteLine($"{JObject.FromObject(obj)}\n");
         }
+    }
+
+    class Family
+    {
+        [JsonProperty(PropertyName = "id")]
+        public string Id { get; set; }
+
+        [JsonProperty(PropertyName = "firstName")]
+        public string FirstName { get; set; }
+
+        [JsonProperty(PropertyName = "lastName")]
+        public string LastName { get; set; }
+
+        [JsonProperty(PropertyName = "age")]
+        public int Age { get; set; }
     }
 }
